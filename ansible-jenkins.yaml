@@ -1,0 +1,62 @@
+---
+- name: Instalação do Jenkins no Red Hat 8
+  hosts: seu_servidor
+  become: true  # Executar com privilégios de superusuário (root)
+  vars:
+    jenkins_port: 8080  # Porta em que o Jenkins será executado
+
+  tasks:
+    - name: Instalar Java (pré-requisito para o Jenkins)
+      yum:
+        name: java-11-openjdk
+        state: present  # serve para ver se esta ja instalado ou nao
+
+    - name: Adicionar repositório do Jenkins
+      yum_repository:
+        name: jenkins
+        description: Jenkins Repository
+        baseurl: https://pkg.jenkins.io/redhat-stable
+        gpgcheck: yes
+        gpgkey: https://pkg.jenkins.io/redhat-stable/jenkins.io.key
+        state: present
+
+    - name: Instalar Jenkins
+      yum:
+        name: jenkins
+        state: present
+
+    - name: Iniciar e habilitar o serviço Jenkins
+      systemd:
+        name: jenkins
+        enabled: yes
+        state: started
+
+    - name: Abrir a porta do firewall para o Jenkins
+      firewalld:
+        port: "{{ jenkins_port }}/tcp"
+        permanent: yes
+        state: enabled
+
+    - name: Reiniciar o serviço de firewall
+      systemd:
+        name: firewalld
+        state: restarted
+
+    - name: esperar ate o jenkins ficar disponivel
+      uri:
+        url: "http://localhost:{{ jenkins_port }}"
+        return_content: yes
+        status_code: 200
+        timeout: 60
+      register: jenkins_status
+      until: jenkins_status.status == 200
+      retries: 10
+      delay: 10
+
+    - name: Exibir a senha inicial do Jenkins
+      command: "cat /var/lib/jenkins/secrets/initialAdminPassword"
+      register: initial_password
+
+    - name: Exibir a senha inicial 
+      debug:
+        var: initial_password.stdout
